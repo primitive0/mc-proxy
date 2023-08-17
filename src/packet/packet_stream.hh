@@ -1,82 +1,65 @@
 #include "../prelude.hh"
 
 #include "../io.hh"
-#include "../serialization.hh"
-#include "ring_buffer.hh"
+#include "../networking/simple_buffer.hh"
 
 template<typename S>
 requires io::Readable<S> && io::Writable<S>
 class PacketStream {
     S inner;
-    RingBuffer buffer{};
+    SimpleBuffer buffer{};
 
 public:
     PacketStream(S&& s) : inner(obj::move(s)) {
-        this->buffer = RingBuffer::create(512);
+        this->buffer = SimpleBuffer::create(512);
+    }
+
+    expected<size_t, monostate> replenish() {
+        auto writable = this->buffer.writable();
+        auto res = this->inner.read(writable);
+        if (!res) {
+            return unexpected(monostate{});
+        }
+        size_t read = *res;
+        this->buffer.advance_read(read);
+        return read;
     }
 
     template<typename P>
     expected<P, monostate> read_packet() {
         // todo: overflow checks
-
-        size_t bytes_read;
-
         if (this->buffer.is_empty()) {
-            VectoredBytes buf = this->buffer.get_free();
-            bytes_read = this->inner.read(buf.first);
-            if (bytes_read == 0) {
-                //todo:???
-            }
-            if (!this->buffer.advance_tail(bytes_read)) {
-                // should always work; throw?
+            this->replenish().value();
+        }
+
+        {
+            auto buf = this->buffer.readable();
+            if (buf[0] == u8(0xfe) && buf[1] == u8(0x1) && buf[2] == u8(0xfa)) {
+                return unexpected(monostate{});
             }
         }
 
-        size_t varint_size = 0;
         size_t packet_size = 0;
         {
-            const u8 CONTINUE_BIT = (u8(1) << 7);
-            const u8 SEGMENT_BITS = static_cast<u8>(~CONTINUE_BIT);
-
-            i32 value = 0;
-            u8 pos = 0;
-            for (;;) {
-                auto byte = this->next_u8();
-                varint_size++;
-                if (!byte) {
-                    return unexpected(monostate{});
-                }
-
-                value |= (*byte & SEGMENT_BITS) << pos;
-                if ((*byte & CONTINUE_BIT) == 0) {
-                    break;
-                }
-                pos = pos + 7;
-
-                // todo: change
-                if (pos >= 32) {
-                    // invalid varint
-                    return unexpected(monostate{});
-                }
+            Deserializer de(this->buffer);
+            auto res = de.read_var_int();
+            auto ignored = de.read_var_int(); // temporary id
+            if (!res) {
+                throw -1;
             }
-            packet_size = static_cast<size_t>(value);
+            packet_size = static_cast<size_t>(*res);
         }
 
-        bytes_read -= varint_size;
+        size_t bytes_read = this->buffer.readable().size();
         if (bytes_read < packet_size) {
             size_t needed = packet_size - bytes_read;
             this->buffer.occupy(needed);
             while (needed != 0) {
-                VectoredBytes buf = this->buffer.get_free();
-                size_t bytes_read1 = this->inner.read(buf.first);
-                if (bytes_read == 0) {
-                    //todo:???
+                size_t read1 = this->replenish().value();
+                if (read1 >= needed) {
+                    break;
                 }
-                if (!this->buffer.advance_tail(bytes_read)) {
-                    // should always work; throw?
-                }
-
-                needed -= bytes_read1; // todo: FIX!
+                needed -= read1;
             }
         }
 

@@ -33,4 +33,19 @@ namespace platform_linux::net {
         }
         return fd;
     }
+
+    expected<monostate, LinuxError> socket_setopt(RawFd socket_fd, SocketOption option, bool enable) {
+        int opt = 0;
+        if (option == SocketOption::ReuseAddr) {
+            opt = SO_REUSEADDR;
+        } else {
+            opt = -1;
+        }
+        int v = enable ? 1 : 0;
+        if (setsockopt(socket_fd, SOL_SOCKET, opt, &v, sizeof(int)) == -1) {
+            LinuxError err = LinuxError::from_errno();
+            return unexpected(err);
+        }
+        return monostate{};
+    }
 }

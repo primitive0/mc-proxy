@@ -43,6 +43,7 @@ namespace net {
 
         void close() {
             if (impl::is_valid_fd(this->socket_fd)) {
+                std::cout << "closed TcpStream(" << this->socket_fd << ")\n";
                 impl::io::fd_close(this->socket_fd);
                 this->socket_fd = -1;
             }
@@ -53,6 +54,7 @@ namespace net {
         }
 
         static TcpStream from_raw_fd(impl::RawFd fd) {
+            std::cout << "opened TcpStream(" << fd << ")\n";
             return TcpStream(fd);
         }
     };
@@ -86,6 +88,13 @@ namespace net {
                 return unexpected(monostate{});
             }
 
+            {
+                auto res = impl::net::socket_setopt(socket_fd, impl::net::SocketOption::ReuseAddr, true);
+                if (!res) {
+                    return unexpected(monostate{});
+                }
+            }
+
             if (impl::net::socket_bind(socket_fd, ip.as_u32(), port) == -1) {
                 impl::io::fd_close(socket_fd);
                 return unexpected(monostate{});
@@ -96,11 +105,14 @@ namespace net {
                 return unexpected(monostate{});
             }
 
+            std::cout << "opened TcpListener(" << socket_fd << ")\n";
+
             return TcpListener(socket_fd);
         }
 
         void close() {
             if (impl::is_valid_fd(this->socket_fd)) {
+                std::cout << "closed TcpListener(" << this->socket_fd << ")\n";
                 impl::io::fd_close(this->socket_fd);
                 this->socket_fd = -1;
             }

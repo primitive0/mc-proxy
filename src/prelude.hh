@@ -12,6 +12,7 @@
 #include <variant>
 #include <span>
 #include <concepts>
+#include <type_traits>
 #include <thread>
 #include <atomic>
 #include <cstring>

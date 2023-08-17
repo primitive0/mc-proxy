@@ -2,7 +2,7 @@
 
 #include "../prelude.hh"
 
-#include "../serialization.hh"
+#include "../networking/deserializer.hh"
 
 enum class HandshakeNextState {
     Status,
@@ -16,28 +16,28 @@ struct C2S_Handshake {
     HandshakeNextState next_state;
 
     template<typename T>
-    static expected<C2S_Handshake, monostate> read_from(Deserializer<T> de) {
+    static expected<C2S_Handshake, monostate> read_from(Deserializer<T>& de) {
         C2S_Handshake packet{};
 
-        auto protocol_version = de.next_var_int();
+        auto protocol_version = de.read_var_int();
         if (!protocol_version) {
             return unexpected(monostate{});
         }
         packet.protocol_version = *protocol_version;
 
-        auto server_address = de.next_string();
+        auto server_address = de.read_string();
         if (!server_address) {
             return unexpected(monostate{});
         }
         packet.server_address = std::move(*server_address);
 
-        auto port = de.next_u16();
+        auto port = de.read_u16();
         if (!port) {
             return unexpected(monostate{});
         }
         packet.port = *port;
 
-        auto next_state_raw = de.next_var_int();
+        auto next_state_raw = de.read_var_int();
         if (!next_state_raw) {
             return unexpected(monostate{});
         }

@@ -2,28 +2,12 @@
 
 #include "net/stream.hh"
 
-#include "packet/cursor.hh"
 #include "packet/handshake.hh"
-#include "serialization.hh"
 #include "packet/packet_stream.hh"
 
 #include "shutdown_handler.hh"
 
 using namespace net;
-
-template<typename T>
-void print_array(span<const T> array) {
-    std::cout << "[";
-    if (array.empty()) {
-        std::cout << " ]\n";
-        return;
-    }
-
-    for (size_t i = 0; i < array.size() - 1; i++) {
-        std::cout << i32(array[i]) << ", ";
-    }
-    std::cout << i32(array[array.size() - 1]) << "]\n";
-}
 
 void handle_connection(TcpStream&&);
 
@@ -54,10 +38,12 @@ i32 main() {
 }
 
 void handle_connection(TcpStream&& client) {
+    std::cout << "new connection\n";
+
     PacketStream packet_stream(obj::move(client));
     auto handshake = packet_stream.read_packet<C2S_Handshake>();
     if (!handshake) {
-        std::cout << "failed to read packet";
+        std::cout << "failed to read packet\n";
         return;
     }
 
