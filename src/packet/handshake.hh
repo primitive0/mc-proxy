@@ -3,6 +3,8 @@
 #include "../prelude.hh"
 
 #include "../serialization/deserializer.hh"
+#include "../serialization/serializer.hh"
+#include "../serialization/write_queue.hh"
 
 enum class HandshakeNextState {
     Status,
@@ -48,6 +50,24 @@ struct C2S_Handshake {
         }
 
         return packet;
+    }
+
+    auto write_queue() const {
+        i32 next_status_byte;
+        switch (this->next_state) {
+        case HandshakeNextState::Status:
+            next_status_byte = 1;
+            break;
+        case HandshakeNextState::Login:
+            next_status_byte = 2;
+            break;
+        }
+
+        return WriteQueue<>{}
+            .push(VarIntSer(this->protocol_version))
+            .push(StringSer(this->server_address))
+            .push(U16Ser(this->port))
+            .push(VarIntSer(next_status_byte));
     }
 };
 

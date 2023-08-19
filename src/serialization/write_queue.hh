@@ -2,27 +2,29 @@
 
 #include "../prelude.hh"
 
-template<typename T = void, typename P = void>
+template<typename S = void, typename P = void>
 struct WriteQueue {
-    T _val;
-    P _prev;
+    S ser;
+    P prev;
 
-    WriteQueue(T val, P prev) : _val(val), _prev(prev) {}
+    WriteQueue(S&& v, P&& prev) : ser(std::move(v)), prev(std::move(prev)) {}
 
-    template<typename X>
-    auto push(X val) {
-        if constexpr (X::DELEGATED) {
-            return val.on_push(*this);
+    WriteQueue(const WriteQueue&) = delete;
+    WriteQueue(WriteQueue&&) = default;
+
+    template<typename N>
+    auto push(N&& next_ser) {
+        if constexpr (N::DELEGATED) {
+            return next_ser.on_push(std::move(*this));
         } else {
-            WriteQueue<X, WriteQueue<T, P>> next(val, *this);
+            WriteQueue<N, WriteQueue<S, P>> next(std::move(next_ser), std::move(*this));
             return next;
         }
     }
 
     template<typename A>
-    auto apply(A accum) {
-        auto it = this->_prev.apply(accum);
-        return it.consume(_val);
+    auto apply(A&& accum) {
+        return this->prev.apply(std::move(accum)).consume(std::move(this->ser));
     }
 
     template<typename A>
@@ -31,25 +33,28 @@ struct WriteQueue {
     }
 };
 
-template<typename T>
-struct WriteQueue<T, void> {
-    T _val;
+template<typename S>
+struct WriteQueue<S, void> {
+    S ser;
 
-    WriteQueue(T val) : _val(val) {}
+    WriteQueue(S&& v) : ser(std::move(v)) {}
 
-    template<typename X>
-    auto push(X val) {
-        if constexpr (X::DELEGATED) {
-            return val.on_push(*this);
+    WriteQueue(const WriteQueue&) = delete;
+    WriteQueue(WriteQueue&&) = default;
+
+    template<typename N>
+    auto push(N&& next_ser) {
+        if constexpr (N::DELEGATED) {
+            return next_ser.on_push(std::move(*this));
         } else {
-            WriteQueue<X, WriteQueue<T, void>> next(val, *this);
+            WriteQueue<N, WriteQueue<S, void>> next(std::move(next_ser), std::move(*this));
             return next;
         }
     }
 
     template<typename A>
-    auto apply(A accum) {
-        return accum.consume(_val);
+    auto apply(A&& accum) {
+        return accum.consume(std::move(this->ser));
     }
 
     template<typename A>
@@ -62,12 +67,15 @@ template<>
 struct WriteQueue<void, void> {
     WriteQueue() = default;
 
-    template<typename T>
-    auto push(T val) {
-        if constexpr (T::DELEGATED) {
-            return val.on_push(*this);
+    WriteQueue(const WriteQueue&) = delete;
+    WriteQueue(WriteQueue&&) = default;
+
+    template<typename N>
+    auto push(N&& next_ser) {
+        if constexpr (N::DELEGATED) {
+            return next_ser.on_push(std::move(*this));
         } else {
-            WriteQueue<T, void> next(val);
+            WriteQueue<N, void> next(std::move(next_ser));
             return next;
         }
     }
@@ -82,121 +90,88 @@ template<typename W = void, typename P = void>
 struct BufferAccum {
     P prev;
     W writer;
-    size_t max_size = 0;
+    size_t size;
 
-    BufferAccum(const P& prev, W writer) : prev(prev), writer(writer), max_size(prev.max_size) {}
+    BufferAccum(P&& prev, W&& writer) : prev(std::move(prev)), writer(std::move(writer)), size(prev.size) {}
+
+    BufferAccum(const BufferAccum&) = delete;
+    BufferAccum(BufferAccum&&) = default;
 
     template<typename S>
-    auto consume(S ser) {
-        auto [writer, max_size] = ser.writer();
-        BufferAccum<decltype(writer), BufferAccum<W, P>> next(*this, writer);
-        next.max_size += max_size;
+    auto consume(S&& ser) {
+        auto writer = ser.writer();
+        auto size = writer.size();
+        BufferAccum<decltype(writer), BufferAccum<W, P>> next(std::move(*this), std::move(writer));
+        next.size += size;
         return next;
+    }
+
+    size_t write(span<u8> buf, size_t cursor) {
+        cursor = this->prev.write(buf, cursor);
+        // todo: overflow check
+        u8* ptr = buf.data() + cursor;
+        writer.write(ptr);
+        return cursor + this->writer.size();
+    }
+
+    void write(span<u8> buf) {
+        this->write(buf, 0);
     }
 };
 
 template<typename W>
 struct BufferAccum<W, void> {
     W writer;
-    size_t max_size;
+    size_t size;
 
-    BufferAccum(W w, size_t ms) : writer(w), max_size(ms) {}
+    BufferAccum(W&& w, size_t size) : writer(std::move(w)), size(size) {}
+
+    BufferAccum(const BufferAccum&) = delete;
+    BufferAccum(BufferAccum&&) = default;
 
     template<typename S>
-    auto consume(S ser) {
-        auto [writer, max_size] = ser.writer();
-        BufferAccum<decltype(writer), BufferAccum<W, void>> next(*this, writer);
-        next.max_size += max_size;
+    auto consume(S&& ser) {
+        auto writer = ser.writer();
+        auto size = writer.size();
+        BufferAccum<decltype(writer), BufferAccum<W, void>> next(std::move(*this), std::move(writer));
+        next.size += size;
         return next;
+    }
+
+    size_t write(span<u8> buf, size_t cursor) {
+        // todo: overflow check
+        u8* ptr = buf.data() + cursor;
+        writer.write(ptr);
+        return cursor + this->writer.size();
+    }
+
+    void write(span<u8> buf) {
+        this->write(buf, 0);
     }
 };
 
 template<>
 struct BufferAccum<void, void> {
-    size_t max_size = 0;
+    size_t size = 0;
+
+    BufferAccum() {}
+
+    BufferAccum(const BufferAccum&) = delete;
+    BufferAccum(BufferAccum&&) = default;
 
     static BufferAccum<> make() {
         return BufferAccum<>{};
     }
 
     template<typename S>
-    auto consume(S ser) {
-        auto [writer, max_size] = ser.writer();
-        BufferAccum<decltype(writer)> next(writer, max_size);
+    auto consume(S&& ser) {
+        auto writer = ser.writer();
+        size_t size = writer.size();
+        BufferAccum<decltype(writer), void> next(std::move(writer), size);
         return next;
     }
-};
 
-constexpr size_t var_int_bytes(int32_t input) {
-    if ((input & (0xFFFFFFFF << 7)) == 0) {
-        return 1;
-    } else if ((input & (0xFFFFFFFF << 14)) == 0) {
-        return 2;
-    } else if ((input & (0xFFFFFFFF << 21)) == 0) {
-        return 3;
-    } else if ((input & (0xFFFFFFFF << 28)) == 0) {
-        return 4;
-    } else {
-        return 5;
-    }
-}
-
-struct VarIntSer {
-    static constexpr bool DELEGATED = false;
-
-    int32_t data;
-
-    VarIntSer(int32_t v) : data(v) {}
-
-    VarIntSer& operator=(const VarIntSer& rhs) {
-        this->data = rhs.data;
-        return *this;
-    }
-
-    std::pair<VarIntSer, size_t> writer() {
-        size_t size = var_int_bytes(this->data);
-        return std::make_pair(*this, size);
-    }
-};
-
-struct BytesSer {
-    static constexpr bool DELEGATED = false;
-
-    std::span<const std::byte> data;
-
-    BytesSer(std::span<const std::byte> v) : data(v) {}
-
-    std::pair<BytesSer, size_t> writer() {
-        size_t size = this->data.size();
-        return std::make_pair(*this, size);
-    }
-};
-
-struct StringSer {
-    static constexpr bool DELEGATED = true;
-
-    const std::string& data;
-
-    StringSer(const std::string& v) : data(v) {}
-
-    template<typename Q>
-    auto on_push(Q queue) {
-        std::span str_span(reinterpret_cast<const std::byte*>(this->data.data()), this->data.size());
-        return queue
-            .push(VarIntSer(this->data.size()))
-            .push(BytesSer(str_span));
-    }
-};
-
-struct MyPacket {
-    int32_t protocol = 700;
-    std::string address = "localhost";
-    int32_t port = 1010;
-
-    auto write_queue() const {
-        return WriteQueue<>{}
-            .push(VarIntSer(this->protocol))
-            .push(StringSer(this->address))
-            .push(VarIntSer(this->port));
+    void write(span<u8> buf) {
+        return;
     }
 };

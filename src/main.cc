@@ -4,6 +4,7 @@
 
 #include "packet/handshake.hh"
 #include "packet/packet_stream.hh"
+#include "packet/disconnect.hh"
 
 #include "shutdown_handler.hh"
 
@@ -14,26 +15,22 @@ using namespace net;
 void handle_connection(TcpStream&&);
 
 i32 main() {
-    // setup_shutdown_handler();
+    setup_shutdown_handler();
 
-    // auto listener = TcpListener::bind(IpAddrV4::UNSPECIFIED, 8080).value();
+    auto listener = TcpListener::bind(IpAddrV4::UNSPECIFIED, 8080).value();
 
-    // for (;;) {
-    //     auto client = listener.accept();
-    //     if (!client) {
-    //         auto& err = client.error();
-    //         if (err.kind == platform_linux::ErrorKind::Interrupted && shutdown_requested.load()) {
-    //             std::cout << "shutting down...\n";
-    //             break;
-    //         }
-    //     }
-    //     handle_connection(obj::move(*client));
-    //     // std::thread t(handle_connection, obj::move(client));
-    // }
-
-    MyPacket packet;
-    auto writer = packet.write_queue().apply<BufferAccum<>>();
-    std::cout << writer.max_size << std::endl;
+    for (;;) {
+        auto client = listener.accept();
+        if (!client) {
+            auto& err = client.error();
+            if (err.kind == platform_linux::ErrorKind::Interrupted && shutdown_requested.load()) {
+                std::cout << "shutting down...\n";
+                break;
+            }
+        }
+        handle_connection(obj::move(*client));
+        // std::thread t(handle_connection, obj::move(client));
+    }
 
     // auto res = IpAddrV4::parse("127.0.0.1");
     // if (!res) {
@@ -55,11 +52,15 @@ void handle_connection(TcpStream&& client) {
         return;
     }
 
-    if (handshake->next_state == HandshakeNextState::Status) {}
-
     std::cout << "protocol version = " << handshake->protocol_version << "\n";
     std::cout << "server address = " << handshake->server_address << "\n";
     std::cout << "port = " << handshake->port << "\n";
+
+    // if (handshake->next_state = HandshakeNextState::Status) {
+    //     return;
+    // }
+
+    packet_stream.write_packet(S2C_Disconnect{"{\"text\":\"foo\"}"});
 
     // auto size = cursor.read_var_int();
     // auto id = cursor.read_var_int();
