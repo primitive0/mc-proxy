@@ -1,6 +1,8 @@
+#pragma once
+
 #include "../prelude.hh"
 
-#include "../networking/deserializer.hh"
+#include "../serialization/deserializer.hh"
 
 struct C2S_LoginStart {
     using UuidType = array<u8, 16>;

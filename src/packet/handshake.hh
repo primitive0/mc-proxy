@@ -2,7 +2,7 @@
 
 #include "../prelude.hh"
 
-#include "../networking/deserializer.hh"
+#include "../serialization/deserializer.hh"
 
 enum class HandshakeNextState {
     Status,

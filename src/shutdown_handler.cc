@@ -13,7 +13,7 @@ static void signal_handler(i32 sig) {
     shutdown_requested.store(true);
 }
 
-void setup_signal_handler() {
+void setup_shutdown_handler() {
     signal::set_signal_handler(signal::SignalType::Interrupt, signal_handler);
     signal::set_signal_handler(signal::SignalType::Terminate, signal_handler);
 }

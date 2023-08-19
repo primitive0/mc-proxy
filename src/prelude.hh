@@ -16,6 +16,9 @@
 #include <thread>
 #include <atomic>
 #include <cstring>
+#include <new>
+#include <memory>
+#include <cstdlib>
 
 #include <tl/expected.hpp>
 
@@ -54,4 +57,6 @@ namespace obj {
 
 namespace mem {
     using std::memcpy;
+    using std::unique_ptr;
+    using std::make_unique;
 }

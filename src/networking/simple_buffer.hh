@@ -2,7 +2,8 @@
 
 #include "../prelude.hh"
 
-#include "deserializer.hh"
+#include "../util/dyn_bytes.hh"
+#include "cursor.hh"
 
 template<typename T>
 inline void print_array(span<const T> array) {
@@ -41,17 +42,17 @@ struct CursorReadTypeTraits<class SimpleBuffer> {
 };
 
 class SimpleBuffer : public CursorRead<SimpleBuffer> {
-    vector<u8> inner;
-    size_t start;
-    size_t read;
+    DynBytes inner{};
+    size_t start = 0;
+    size_t read = 0;
 
-    SimpleBuffer(vector<u8>&& v) : inner(obj::move(v)), start(0), read(0) {}
+    SimpleBuffer(DynBytes&& v) : inner(obj::move(v)), start(0), read(0) {}
 
 public:
-    SimpleBuffer() : inner() {}
+    SimpleBuffer() = default;
 
     static SimpleBuffer create(size_t n) {
-        return SimpleBuffer(vector<u8>(n, u8(0)));
+        return SimpleBuffer(DynBytes::make(n));
     }
 
     bool is_empty() const {
@@ -63,11 +64,11 @@ public:
     }
 
     span<u8> writable() {
-        return (span(this->inner)).subspan(this->read, this->size() - this->read);
+        return this->inner.as_span().subspan(this->read, this->size() - this->read);
     }
 
     span<const u8> readable() {
-        return (span(this->inner)).subspan(this->start, this->read - this->start);
+        return this->inner.as_span().subspan(this->start, this->read - this->start);
     }
 
     bool advance_read(size_t n) {
@@ -93,7 +94,7 @@ public:
         }
 
         SimpleBytes bytes{};
-        bytes.inner = (span(this->inner)).subspan(this->start, n);
+        bytes.inner = this->inner.as_span().subspan(this->start, n);
 
         this->start += n;
 

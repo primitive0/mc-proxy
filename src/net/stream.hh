@@ -23,6 +23,8 @@ namespace net {
         TcpStream(TcpStream&& other) {
             this->socket_fd = other.socket_fd;
             other.socket_fd = -1;
+
+            std::cout << "moved TcpStream(" << this->socket_fd << ")\n";
         }
 
         expected<size_t, monostate> read(span<u8> buf) {

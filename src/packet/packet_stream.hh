@@ -1,7 +1,10 @@
+#pragma once
+
 #include "../prelude.hh"
 
 #include "../io.hh"
 #include "../networking/simple_buffer.hh"
+#include "../serialization/deserializer.hh"
 
 template<typename S>
 requires io::Readable<S> && io::Writable<S>
@@ -12,17 +15,6 @@ class PacketStream {
 public:
     PacketStream(S&& s) : inner(obj::move(s)) {
         this->buffer = SimpleBuffer::create(512);
-    }
-
-    expected<size_t, monostate> replenish() {
-        auto writable = this->buffer.writable();
-        auto res = this->inner.read(writable);
-        if (!res) {
-            return unexpected(monostate{});
-        }
-        size_t read = *res;
-        this->buffer.advance_read(read);
-        return read;
     }
 
     template<typename P>
@@ -65,5 +57,17 @@ public:
 
         Deserializer de(this->buffer);
         return P::read_from(de);
+    }
+
+private:
+    expected<size_t, monostate> replenish() {
+        auto writable = this->buffer.writable();
+        auto res = this->inner.read(writable);
+        if (!res) {
+            return unexpected(monostate{});
+        }
+        size_t read = *res;
+        this->buffer.advance_read(read);
+        return read;
     }
 };
