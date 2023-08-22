@@ -10,6 +10,8 @@
 
 #include "serialization/write_queue.hh"
 
+#include "serialization/buffer_writer.hh"
+
 using namespace net;
 
 void handle_connection(TcpStream&&);
@@ -40,6 +42,17 @@ i32 main() {
 
     return 0;
 }
+
+// i32 main() {
+//     S2C_Disconnect packet{};
+//     packet.json = "";
+//     packet.test = 42;
+
+//     auto buffer_writer = BufferWriter<S2C_Disconnect>::create(packet);
+//     std::cout << buffer_writer.size << "\n";
+
+//     return 0;
+// }
 
 void handle_connection(TcpStream&& client) {
     std::cout << "new connection\n";
