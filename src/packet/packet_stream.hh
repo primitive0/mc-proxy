@@ -5,8 +5,8 @@
 #include "../io.hh"
 #include "../networking/simple_buffer.hh"
 #include "../serialization/deserializer.hh"
-#include "../serialization/write_queue.hh"
 #include "../serialization/serializer.hh"
+#include "../serialization/buffer_writer.hh"
 
 template<typename S>
 requires io::Readable<S> && io::Writable<S>
@@ -64,8 +64,8 @@ public:
 
     template<typename P>
     expected<monostate, monostate> write_packet(const P& packet) {
-        auto packet_writer = packet.write_queue().apply(BufferAccum<>::make());
-        i32 packet_size = packet_writer.size;
+        auto packet_writer = BufferWriter<P>::create(packet);
+        i32 packet_size = packet_writer.size();
         i32 packet_id = 0; // todo: replace
         i32 framed_packet_size = count_var_int_bytes(packet_id) + packet_size;
         i32 buf_size = count_var_int_bytes(framed_packet_size) + framed_packet_size;

@@ -15,39 +15,15 @@ struct FieldInfo {
 };
 
 template<typename T, typename F = void, typename... Fs>
-struct Codec : Codec<T, Fs...> {
+struct Codec : public Codec<T, Fs...> {
 
     using PrevType = Codec<T, Fs...>;
     using FieldInfoType = FieldInfo<T, F>;
 
     static constexpr size_t SIZE = PrevType::SIZE + 1;
-
-    // template<typename N>
-    // constexpr auto push(N unused) {
-    //     if constexpr (N::DELEGATED) {
-    //         return N::on_push(*this);
-    //     } else {
-    //         return Codec<T, F, Fs..., N>{};
-    //     }
-    // }
-
-    // template<typename A>
-    // constexpr auto apply(A accum) {
-    //     constexpr auto it = Prev::apply(accum);
-    //     return it.template consume<FCodec>();
-    // }
 };
 
 template<typename T>
 struct Codec<T, void> {
     static constexpr size_t SIZE = 0;
-
-    // template<typename N>
-    // constexpr auto push(N unused) {
-    //     if constexpr (N::DELEGATED) {
-    //         return N::on_push(*this);
-    //     } else {
-    //         return Codec<T, N>{};
-    //     }
-    // }
 };

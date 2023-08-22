@@ -19,6 +19,11 @@ inline void print_array(span<const T> array) {
     std::cout << i32(array[array.size() - 1]) << "]\n";
 }
 
+template<typename T>
+inline void print_array(span<T> array) {
+    print_array(span<const T>(array));
+}
+
 struct SimpleBytes : public Bytes<SimpleBytes> {
     span<const u8> inner;
 

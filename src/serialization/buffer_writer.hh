@@ -6,55 +6,67 @@
 #include "../util/rtype_access.hh"
 
 template<typename T, typename CodecType = decltype(T::codec()), std::size_t CodecSize = CodecType::SIZE>
-struct BufferWriter : BufferWriter<T, typename CodecType::PrevType> {
-
-    using PrevType = BufferWriter<T, typename CodecType::PrevType>;
+class BufferWriterData : public BufferWriterData<T, typename CodecType::PrevType> {
+public:
+    using PrevType = BufferWriterData<T, typename CodecType::PrevType>;
 
     using FieldCodec = typename CodecType::FieldInfoType::FieldCodec;
     using ThisWriter = typename FieldCodec::Writer;
 
     ThisWriter this_writer{};
-    size_t size = 0;
 
-    template <std::size_t... Is>
-    static void create_impl(BufferWriter<T>& buffer_writer, const T& t, std::index_sequence<Is...>) {
-        size_t size_ = 0;
+    template<typename Callable>
+    constexpr void for_each(Callable fn) {
+        this->for_each_impl(fn, std::make_index_sequence<CodecSize>{});
+    }
+
+private:
+    template<typename Callable, std::size_t... Is>
+    constexpr void for_each_impl(Callable fn, std::index_sequence<Is...>) {
         (([&]() {
-            using BufferWriterT = typename RTypeAccess<BufferWriter<T>, Is>::It;
-            using WriterType = BufferWriterT::ThisWriter;
-
-            auto writer_member_ptr = &BufferWriterT::this_writer;
-            auto t_member_ptr = RTypeAccess<CodecType, Is>::It::FieldInfoType::FieldCodec::PTR;
-
-            auto field_writer = WriterType(&(t.*(t_member_ptr)));
-            size_ += field_writer.size();
-            buffer_writer.*(writer_member_ptr) = field_writer;
+            using NodeType = typename RTypeAccess<BufferWriterData<T>, Is>::It;
+            auto& node = static_cast<NodeType&>(*this);
+            fn(node);
         })(), ...);
-        buffer_writer.size = size_;
-    }
-
-    static auto create(const T& t) {
-        BufferWriter<T> buffer_writer{};
-        create_impl(buffer_writer, t, std::make_index_sequence<CodecSize>{});
-        return buffer_writer;
-    }
-
-    template <std::size_t... Is>
-    void write_impl(span<u8> buf, std::index_sequence<Is...>) {
-        size_t cursor = 0;
-        (([&]() {
-            using BufferWriterT = typename RTypeAccess<BufferWriter<T>, Is>::It;
-            auto writer_member_ptr = &BufferWriterT::this_writer;
-            auto& field_writer = this->*(writer_member_ptr);
-            field_writer.write(buf.data() + cursor);
-            cursor += field_writer.size();
-        })(), ...);
-    }
-
-    void write(span<u8> buf) {
-        this->write_impl(buf, std::make_index_sequence<CodecSize>{});
     }
 };
 
 template<typename T>
-struct BufferWriter<T, Codec<T, void>, 0> {};
+struct BufferWriterData<T, Codec<T, void>, 0> {};
+
+template<typename T>
+class BufferWriter {
+    using DataType = BufferWriterData<T>;
+
+    DataType data;
+    size_t _size;
+
+    // todo: move
+    BufferWriter(DataType data, size_t _size) : data(data), _size(_size) {}
+
+public:
+    static BufferWriter<T> create(const T& t) {
+        DataType data{};
+        size_t size = 0;
+        data.for_each([&](auto& node) {
+            using NodeType = std::remove_reference_t<decltype(node)>;
+            using WriterType = typename NodeType::ThisWriter;
+            auto t_member = NodeType::FieldCodec::PTR;
+            node.this_writer = WriterType(&(t.*(t_member)));
+            size += node.this_writer.size();
+        });
+        return BufferWriter(data, size);
+    }
+
+    void write(span<u8> buf) {
+        size_t cursor = 0;
+        this->data.for_each([&](auto& node){
+            node.this_writer.write(buf.data() + cursor);
+            cursor += node.this_writer.size();
+        });
+    }
+
+    size_t size() const {
+        return this->_size;
+    }
+};

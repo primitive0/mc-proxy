@@ -63,8 +63,38 @@ namespace fc {
     //     }
     // };
 
+    class StringWriter {
+        const string* data;
+        size_t _varint_size;
+        size_t _size;
+
+    public:
+        StringWriter() : data(nullptr), _size(0) {}
+
+        StringWriter(const string* v) : data(v) {
+            this->_varint_size = count_var_int_bytes(data->size());
+            this->_size = this->_varint_size + data->size();
+        }
+
+        size_t size() const {
+            return this->_size;
+        }
+
+        void write(u8* buf) {
+            auto str_size = static_cast<i32>(this->data->size());
+            // todo: use varint api
+            VarIntWriter(&str_size).write(buf);
+            mem::memcpy(buf + _varint_size, this->data->data(), this->data->size());
+        }
+    };
+
     template<auto M>
     struct VarInt : public FieldTypeBase<i32, M> {
         using Writer = fc::VarIntWriter;
+    };
+
+    template<auto M>
+    struct String : public FieldTypeBase<string, M> {
+        using Writer  = fc::StringWriter;
     };
 }

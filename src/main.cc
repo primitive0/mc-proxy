@@ -8,8 +8,6 @@
 
 #include "shutdown_handler.hh"
 
-#include "serialization/write_queue.hh"
-
 #include "serialization/buffer_writer.hh"
 
 using namespace net;
@@ -46,10 +44,11 @@ i32 main() {
 // i32 main() {
 //     S2C_Disconnect packet{};
 //     packet.json = "";
-//     packet.test = 42;
 
 //     auto buffer_writer = BufferWriter<S2C_Disconnect>::create(packet);
-//     std::cout << buffer_writer.size << "\n";
+//     DynBytes buf = DynBytes::make(buffer_writer.size());
+//     buffer_writer.write(buf.as_span());
+//     print_array(buf.as_span());
 
 //     return 0;
 // }
