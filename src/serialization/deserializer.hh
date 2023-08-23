@@ -3,35 +3,56 @@
 #include "../prelude.hh"
 #include "../networking/cursor.hh"
 
-template<typename T>
-class Deserializer {
-    CursorRead<T>& reader;
+enum class VarIntReadError {
+    Partial,
+    Overflow,
+};
 
-public:
-    using BytesType = Bytes<typename CursorRead<T>::BytesType>;
+namespace serialization {
+    template<typename T>
+    inline expected<i32, VarIntReadError> read_var_int(CursorRead<T>& c) {
+        const u8 CONTINUE_BIT = (u8(1) << 7);
+        const u8 SEGMENT_BITS = static_cast<u8>(~CONTINUE_BIT);
 
-    Deserializer(CursorRead<T>& r) : reader(r) {};
+        i32 value = 0;
+        u8 pos = 0;
+        for (;;) {
+            auto byte = c.read_u8();
+            if (!byte) {
+                return unexpected(VarIntReadError::Partial);
+            }
 
-    inline expected<vector<u8>, monostate> read_bytes(size_t n) {
-        auto bytes = this->reader.read_bytes(n);
+            value |= (*byte & SEGMENT_BITS) << pos;
+            if ((*byte & CONTINUE_BIT) == 0) {
+                break;
+            }
+            pos = pos + 7;
+
+            if (pos >= 32) {
+                return unexpected(VarIntReadError::Overflow);
+            }
+        }
+        return value;
+    }
+
+    template<typename T>
+    inline expected<string, monostate> read_string(CursorRead<T>& c) {
+        // todo: better casts
+        auto size = read_var_int(c);
+        if (!size) {
+            return unexpected(monostate{});
+        }
+        auto bytes = c.read_bytes(static_cast<size_t>(*size));
         if (!bytes) {
             return unexpected(monostate{});
         }
-        vector<u8> buf(n, 0);
-        bytes->copy(buf);
-        return buf;
+        // todo: safety?
+        return string(bytes->begin(), bytes->end());
     }
 
-    inline expected<u8, monostate> read_u8() {
-        auto byte = this->read_bytes(1);
-        if (!byte) {
-            return unexpected(monostate{});
-        }
-        return byte->front();
-    }
-
-    inline expected<u16, monostate> read_u16() {
-        auto bytes = this->read_bytes(2);
+    template<typename T>
+    inline expected<u16, monostate> read_u16(CursorRead<T>& c) {
+        auto bytes = c.read_bytes(2);
         if (!bytes) {
             return unexpected(monostate{});
         }
@@ -45,35 +66,9 @@ public:
         #endif
     }
 
-    inline expected<i32, monostate> read_var_int() {
-        const u8 CONTINUE_BIT = (u8(1) << 7);
-        const u8 SEGMENT_BITS = static_cast<u8>(~CONTINUE_BIT);
-
-        i32 value = 0;
-        u8 pos = 0;
-        for (;;) {
-            auto byte = this->read_u8();
-            if (!byte) {
-                return unexpected(monostate{});
-            }
-
-            value |= (*byte & SEGMENT_BITS) << pos;
-            if ((*byte & CONTINUE_BIT) == 0) {
-                break;
-            }
-            pos = pos + 7;
-
-            // todo: change
-            if (pos >= 32) {
-                // invalid varint
-                return unexpected(monostate{});
-            }
-        }
-        return value;
-    }
-
-    inline expected<bool, monostate> read_bool() {
-        auto v = this->read_u8();
+    template<typename T>
+    inline expected<bool, monostate> read_bool(CursorRead<T>& c) {
+        auto v = c.read_u8();
         if (!v) {
             return unexpected(monostate{});
         }
@@ -86,18 +81,4 @@ public:
                 return unexpected(monostate{});
         }
     }
-
-    inline expected<string, monostate> read_string() {
-        // todo: better casts
-        auto size = this->read_var_int();
-        if (!size) {
-            return unexpected(monostate{});
-        }
-        auto bytes = this->read_bytes(static_cast<size_t>(*size));
-        if (!bytes) {
-            return unexpected(monostate{});
-        }
-        // todo: safety?
-        return string(bytes->begin(), bytes->end());
-    }
-};
+}

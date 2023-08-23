@@ -16,29 +16,32 @@ struct C2S_Handshake {
     u16 port;
     HandshakeNextState next_state;
 
+    static const i32 ID = 0;
+
     template<typename T>
-    static expected<C2S_Handshake, monostate> read_from(Deserializer<T>& de) {
+    static expected<C2S_Handshake, monostate> read_from(CursorRead<T>& c) {
         C2S_Handshake packet{};
 
-        auto protocol_version = de.read_var_int();
+        auto protocol_version = serialization::read_var_int(c);
         if (!protocol_version) {
             return unexpected(monostate{});
         }
         packet.protocol_version = *protocol_version;
 
-        auto server_address = de.read_string();
+        auto server_address = serialization::read_string(c);
         if (!server_address) {
             return unexpected(monostate{});
         }
         packet.server_address = std::move(*server_address);
 
-        auto port = de.read_u16();
+        auto port = serialization::read_u16(c);
         if (!port) {
             return unexpected(monostate{});
         }
         packet.port = *port;
 
-        auto next_state_raw = de.read_var_int();
+        // todo: u8?
+        auto next_state_raw = serialization::read_var_int(c);
         if (!next_state_raw) {
             return unexpected(monostate{});
         }

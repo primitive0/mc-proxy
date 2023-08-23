@@ -11,23 +11,23 @@ struct C2S_LoginStart {
     optional<UuidType> uuid;
 
     template<typename T>
-    static expected<C2S_LoginStart, monostate> read_from(Deserializer<T>& de) {
+    static expected<C2S_LoginStart, monostate> read_from(CursorRead<T>& c) {
         C2S_LoginStart packet{};
 
-        auto username = de.read_string();
+        auto username = serialization::read_string(c);
         if (!username) {
             return unexpected(monostate{});
         }
         packet.username = std::move(*username);
 
-        auto has_player_uuid = de.read_bool();
+        auto has_player_uuid = serialization::read_bool(c);
         if (!has_player_uuid) {
             return unexpected(monostate{});
         }
 
         optional<UuidType> uuid = nullopt;
         if (*has_player_uuid) {
-            auto data = de.read_bytes(8);
+            auto data = c.read_bytes(8);
             if (!data) {
                 return unexpected(monostate{});
             }

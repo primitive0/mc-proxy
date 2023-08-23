@@ -3,6 +3,8 @@
 #include "net/stream.hh"
 
 #include "packet/handshake.hh"
+#include "packet/status_request.hh"
+#include "packet/status_response.hh"
 #include "packet/packet_stream.hh"
 #include "packet/disconnect.hh"
 
@@ -68,9 +70,11 @@ void handle_connection(TcpStream&& client) {
     std::cout << "server address = " << handshake->server_address << "\n";
     std::cout << "port = " << handshake->port << "\n";
 
-    // if (handshake->next_state = HandshakeNextState::Status) {
-    //     return;
-    // }
+    if (handshake->next_state == HandshakeNextState::Status) {
+        packet_stream.read_packet<C2S_StatusRequest>().value();
+        packet_stream.write_packet(S2C_StatusResponse{"{\"version\":{\"name\":\"1.19.4\",\"protocol\":762},\"players\":{\"max\":100,\"online\":5,\"sample\":[{\"name\":\"thinkofdeath\",\"id\":\"4566e69f-c907-48ee-8d71-d7ba5aa00d20\"}]},\"description\":{\"text\":\"Hello world\"},\"enforcesSecureChat\":true,\"previewsChat\":true}"});
+        return;
+    }
 
     packet_stream.write_packet(S2C_Disconnect{"{\"text\":\"foo\"}"});
 

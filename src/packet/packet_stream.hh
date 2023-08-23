@@ -12,54 +12,73 @@ template<typename S>
 requires io::Readable<S> && io::Writable<S>
 class PacketStream {
     S inner;
-    SimpleBuffer buffer{};
-    DynBytes write_buffer{};
+    SimpleBuffer read_buffer;
+    DynBytes write_buffer;
 
 public:
-    PacketStream(S&& s) : inner(obj::move(s)) {
-        this->buffer = SimpleBuffer::create(512);
-    }
+    PacketStream(S&& s) :
+        inner(obj::move(s)),
+        read_buffer(SimpleBuffer::create(512)),
+        write_buffer() {}
 
     template<typename P>
     expected<P, monostate> read_packet() {
         // todo: overflow checks
-        if (this->buffer.is_empty()) {
+
+        // todo: remove this ---
+        if (this->read_buffer.is_empty()) {
             this->replenish().value();
         }
 
         {
-            auto buf = this->buffer.readable();
+            auto buf = this->read_buffer.readable();
             if (buf[0] == u8(0xfe) && buf[1] == u8(0x1) && buf[2] == u8(0xfa)) {
                 return unexpected(monostate{});
             }
         }
+        // ---
 
         size_t packet_size = 0;
         {
-            Deserializer de(this->buffer);
-            auto res = de.read_var_int();
-            auto ignored = de.read_var_int(); // temporary id
+            auto res = this->read_packet_size();
             if (!res) {
-                throw -1;
+                return unexpected(monostate{});
             }
-            packet_size = static_cast<size_t>(*res);
+            packet_size = static_cast<i32>(*res); // todo: better cast
         }
 
-        size_t bytes_read = this->buffer.readable().size();
+        size_t bytes_read = this->read_buffer.readable().size();
         if (bytes_read < packet_size) {
             size_t needed = packet_size - bytes_read;
-            this->buffer.occupy(needed);
+            if (needed > 1024 * 1024 * 16) {
+                return unexpected(monostate{});
+            }
+            this->read_buffer.occupy(needed);
+            i32 a = 0;
             while (needed != 0) {
-                size_t read1 = this->replenish().value();
-                if (read1 >= needed) {
+                a++;
+                size_t read = this->replenish().value();
+                if (read >= needed) {
                     break;
                 }
-                needed -= read1;
+                needed -= read;
+                if (a > 100) {
+                    throw i32(-1);
+                }
             }
         }
 
-        Deserializer de(this->buffer);
-        return P::read_from(de);
+        SpanCursor cursor(this->read_buffer.readable());
+        this->read_buffer.advance_start(packet_size);
+
+        auto packet_id = serialization::read_var_int(cursor);
+        if (!packet_id) {
+            return unexpected(monostate{});
+        }
+        if (*packet_id != P::ID) {
+            return unexpected(monostate{});
+        }
+        return P::read_from(cursor);
     }
 
     template<typename P>
@@ -94,14 +113,34 @@ public:
 
 private:
     expected<size_t, monostate> replenish() {
-        auto writable = this->buffer.writable();
+        auto writable = this->read_buffer.writable();
         auto res = this->inner.read(writable);
         if (!res) {
             return unexpected(monostate{});
         }
         size_t read = *res;
-        this->buffer.advance_read(read);
+        this->read_buffer.advance_read(read);
         return read;
+    }
+
+    // todo: return size_t?
+    expected<i32, monostate> read_packet_size() {
+        for (;;) {
+            SpanCursor cursor(this->read_buffer.readable());
+            auto size = serialization::read_var_int(cursor);
+            if (!size) {
+                if (size.error() == VarIntReadError::Partial) {
+                    if (auto res = this->replenish(); !res) {
+                        return unexpected(monostate{});
+                    }
+                    continue;
+                } else if (size.error() == VarIntReadError::Overflow) {
+                    return unexpected(monostate{});
+                }
+            }
+            this->read_buffer.advance_start(cursor.pos());
+            return *size;
+        }
     }
 
     void occupy_write_buf(size_t n) {

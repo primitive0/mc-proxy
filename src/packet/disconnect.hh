@@ -1,6 +1,7 @@
+#pragma once
+
 #include "../prelude.hh"
 
-#include "../serialization/serializer.hh"
 #include "../serialization/codec.hh"
 #include "../serialization/field_codec.hh"
 
