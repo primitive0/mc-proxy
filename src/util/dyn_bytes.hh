@@ -12,6 +12,8 @@ public:
     constexpr DynBytes() = default;
 
     DynBytes& operator=(DynBytes&& other) {
+        this->free_unsafe();
+
         this->ptr = other.ptr;
         this->_size = other._size;
 
@@ -30,9 +32,7 @@ public:
     DynBytes& operator=(const DynBytes&) = delete;
 
     ~DynBytes() {
-        if (this->ptr != nullptr) {
-            std::free(this->ptr);
-        }
+        this->free_unsafe();
     }
 
     static DynBytes make(size_t size) {
@@ -41,6 +41,13 @@ public:
             throw std::bad_alloc{};
         }
         return DynBytes(ptr, size);
+    }
+
+private:
+    void free_unsafe() {
+        if (this->ptr != nullptr) {
+            std::free(this->ptr);
+        }
     }
 
 public:
@@ -54,5 +61,13 @@ public:
 
     span<const u8> as_span() const {
         return span(this->ptr, this->size());
+    }
+
+    u8& at(size_t i) {
+        return this->as_span()[i];
+    }
+
+    const u8& at(size_t i) const {
+        return this->as_span()[i];
     }
 };
