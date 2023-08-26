@@ -9,6 +9,7 @@ enum class VarIntReadError {
 };
 
 namespace serialization {
+
     template<typename T>
     inline expected<i32, VarIntReadError> read_var_int(CursorRead<T>& c) {
         const u8 CONTINUE_BIT = (u8(1) << 7);

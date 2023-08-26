@@ -2,6 +2,8 @@
 
 #include "../prelude.hh"
 
+#include "../networking/cursor.hh"
+
 inline size_t count_var_int_bytes(i32 input) {
     if ((input & (0xFFFFFFFF << 7)) == 0) {
         return 1;
@@ -48,22 +50,6 @@ public:
     }
 };
 
-class VarIntSer {
-    i32 data;
-
-public:
-    static constexpr bool DELEGATED = false;
-
-    VarIntSer(i32 v) : data(v) {}
-
-    VarIntSer(const VarIntSer&) = delete;
-    VarIntSer(VarIntSer&&) = default;
-
-    VarIntWriter writer() {
-        return VarIntWriter(this->data);
-    }
-};
-
 class BytesWriter {
     span<const u8> data;
 
@@ -79,42 +65,6 @@ public:
 
     void write(u8* buf) {
         mem::memcpy(buf, this->data.data(), this->data.size());
-    }
-};
-
-class BytesSer {
-    span<const u8> data;
-
-public:
-    static constexpr bool DELEGATED = false;
-
-    BytesSer(span<const u8> v) : data(v) {}
-
-    BytesSer(const BytesSer&) = delete;
-    BytesSer(BytesSer&&) = default;
-
-    BytesWriter writer() {
-        return BytesWriter(this->data);
-    }
-};
-
-struct StringSer {
-    static constexpr bool DELEGATED = true;
-
-    const string* data;
-
-    StringSer(const string& v) : data(&v) {}
-
-    StringSer(const StringSer&) = delete;
-    StringSer(StringSer&&) = default;
-
-    template<typename Q>
-    auto on_push(Q&& queue) {
-        auto str_data = reinterpret_cast<const u8*>(this->data->data());
-        auto str_size = this->data->size();
-        return queue
-            .push(VarIntSer(this->data->size()))
-            .push(BytesSer(span(str_data, str_size)));
     }
 };
 
@@ -139,18 +89,16 @@ class U16Writer {
     }
 };
 
-class U16Ser {
-    u16 data;
+namespace serialization {
 
-public:
-    static constexpr bool DELEGATED = false;
-
-    U16Ser(u16 v) : data(v) {}
-
-    U16Ser(const U16Ser&) = delete;
-    U16Ser(U16Ser&&) = default;
-
-    VarIntWriter writer() {
-        return VarIntWriter(this->data);
+    template<typename T>
+    expected<monostate, monostate> write_var_int(CursorWrite<T>& cursor, i32 v) {
+        auto w = VarIntWriter(v);
+        auto bytes = cursor.occupy_bytes(w.size());
+        if (!bytes) {
+            return unexpected(monostate{});
+        }
+        w.write(bytes->data());
+        return monostate{};
     }
 };

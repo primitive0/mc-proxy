@@ -82,14 +82,32 @@ public:
     }
 };
 
-class SpanCursor : public CursorRead<SpanCursor> {
-    span<const u8> buf;
+template<typename D>
+class CursorWrite {
+    D& impl() {
+        return static_cast<D&>(*this);
+    }
+
+public:
+    expected<span<u8>, monostate> occupy_bytes(size_t n) {
+        return this->impl().occupy_bytes_impl(n);
+    }
+};
+
+class SpanCursor : public CursorRead<SpanCursor>, public CursorWrite<SpanCursor> {
+    span<u8> buf;
     size_t _pos;
 
 public:
-    SpanCursor(span<const u8> buf) : buf(buf), _pos(0) {}
+    SpanCursor(span<u8> buf) : buf(buf), _pos(0) {}
 
     expected<span<const u8>, monostate> read_bytes_impl(size_t n) {
+        return this->occupy_bytes_impl(n).map([](auto s) {
+            return span<const u8>(s);
+        });
+    }
+
+    expected<span<u8>, monostate> occupy_bytes_impl(size_t n) {
         if (n > buf.size() - this->_pos) {
             return unexpected(monostate{});
         }

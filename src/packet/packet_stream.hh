@@ -53,7 +53,9 @@ public:
             if (needed > 1024 * 1024 * 16) {
                 return unexpected(monostate{});
             }
+
             this->read_buffer.occupy(needed);
+            // todo: replace a
             i32 a = 0;
             while (needed != 0) {
                 a++;
@@ -91,19 +93,11 @@ public:
 
         this->occupy_write_buf(buf_size);
 
-        size_t cursor = 0;
-        {
-            auto w = VarIntSer(framed_packet_size).writer();
-            w.write(this->write_buffer.as_span().data() + cursor);
-            cursor += w.size();
-        }
-        {
-            auto w = VarIntSer(packet_id).writer();
-            w.write(this->write_buffer.as_span().data() + cursor);
-            cursor += w.size();
-        }
+        SpanCursor cursor(this->write_buffer.as_span());
+        serialization::write_var_int(cursor, framed_packet_size);
+        serialization::write_var_int(cursor, packet_id);
 
-        auto packet_buf = this->write_buffer.as_span().subspan(cursor);
+        auto packet_buf = this->write_buffer.as_span().subspan(cursor.pos());
         packet_writer.write(packet_buf);
 
         auto buf = this->write_buffer.as_span().subspan(0, buf_size);

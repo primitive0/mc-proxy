@@ -133,7 +133,7 @@ public:
         return this->inner.as_span().subspan(this->read, this->size() - this->read);
     }
 
-    span<const u8> readable() {
+    span<u8> readable() {
         return this->inner.as_span().subspan(this->start, this->read - this->start);
     }
 

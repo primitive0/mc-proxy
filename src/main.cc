@@ -34,12 +34,6 @@ i32 main() {
         // std::thread t(handle_connection, obj::move(client));
     }
 
-    // auto res = IpAddrV4::parse("127.0.0.1");
-    // if (!res) {
-    //     std::cout << "failed to parse\n";
-    // }
-    // print_array<const u8>(res.value().data);
-
     return 0;
 }
 
